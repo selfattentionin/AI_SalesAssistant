@@ -123,7 +123,7 @@ st.markdown(
 def format_gemini_error_message(exc: Exception) -> str:
     """Translate Google API quota and invalid-key errors into a helpful UI message."""
     message = str(exc).lower()
-    return message
+    
 
     if any(token in message for token in [
         "quota exceeded",
@@ -138,7 +138,7 @@ def format_gemini_error_message(exc: Exception) -> str:
     ]):
         return (
             "Gemini free credits appear to be exhausted or the current key no longer has access. "
-            "Update the Gemini API key in the sidebar to continue."
+            "Update the Gemini API key in the sidebar to continue. or Retry after 12 hrs"
         )
 
     if any(token in message for token in [
