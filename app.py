@@ -123,6 +123,7 @@ st.markdown(
 def format_gemini_error_message(exc: Exception) -> str:
     """Translate Google API quota and invalid-key errors into a helpful UI message."""
     message = str(exc).lower()
+    return message
 
     if any(token in message for token in [
         "quota exceeded",
