@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import app
 from assist import build_vector_store, load_documents_from_directory
 
 
@@ -27,3 +28,12 @@ def test_build_vector_store_creates_index(tmp_path):
 
     assert vector_store is not None
     assert store_path.exists()
+
+
+def test_format_gemini_error_message_handles_expired_free_credits():
+    error = RuntimeError("429 Resource exhausted: Quota exceeded for a project and billing is disabled.")
+
+    message = app.format_gemini_error_message(error)
+
+    assert "free credits" in message.lower()
+    assert "update" in message.lower()
