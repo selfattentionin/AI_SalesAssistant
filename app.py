@@ -120,6 +120,45 @@ st.markdown(
 )
 
 
+def format_gemini_error_message(exc: Exception) -> str:
+    """Translate Google API quota and invalid-key errors into a helpful UI message."""
+    message = str(exc).lower()
+
+    if any(token in message for token in [
+        "quota exceeded",
+        "rate limit",
+        "resource exhausted",
+        "billing is disabled",
+        "free credits",
+        "credit",
+        "429",
+        "usage limit",
+        "limit exceeded",
+    ]):
+        return (
+            "Gemini free credits appear to be exhausted or the current key no longer has access. "
+            "Update the Gemini API key in the sidebar to continue."
+        )
+
+    if any(token in message for token in [
+        "api key",
+        "invalid api",
+        "authentication",
+        "permission denied",
+        "unauthorized",
+        "forbidden",
+    ]):
+        return (
+            "The Gemini API key is invalid or no longer authorized. "
+            "Please update the Gemini API key in the sidebar."
+        )
+
+    return (
+        "The Gemini service is currently unavailable. Please update the Gemini API key in the sidebar "
+        "and try again."
+    )
+
+
 def get_api_key() -> Optional[str]:
     """Read Gemini API key from env or Streamlit secrets."""
     value = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -137,8 +176,13 @@ def initialize_session_assistant() -> Optional[object]:
     if not key:
         return None
     if "assistant" not in st.session_state or st.session_state.get("assistant_key") != key:
-        st.session_state.assistant = initialize_chatbot(api_key=key)
-        st.session_state.assistant_key = key
+        try:
+            st.session_state.assistant = initialize_chatbot(api_key=key)
+            st.session_state.assistant_key = key
+            st.session_state.pop("assistant_init_error", None)
+        except Exception as exc:
+            st.session_state["assistant_init_error"] = format_gemini_error_message(exc)
+            return None
     return st.session_state.assistant
 
 
@@ -156,10 +200,24 @@ def render_sidebar() -> None:
         st.title("LG Refrigerator Sales Bot")
         st.caption("PDF-driven RAG assistant for LG refrigerators")
 
-        api_key = st.text_input("Gemini API key", type="password", value=get_api_key() or "")
-        if api_key:
-            os.environ["GEMINI_API_KEY"] = api_key
-            st.session_state["entered_api_key"] = api_key
+        if get_api_key():
+            st.caption("Gemini key is configured and hidden for security.")
+
+        with st.form("gemini_key_form", clear_on_submit=True):
+            new_api_key = st.text_input(
+                "Gemini API key",
+                type="password",
+                value="",
+                help="Hidden by default. Enter a new key only when you need to update it.",
+                placeholder="Update Gemini API key",
+            )
+            submitted = st.form_submit_button("Update Gemini key", use_container_width=True)
+
+        if submitted and new_api_key.strip():
+            os.environ["GEMINI_API_KEY"] = new_api_key.strip()
+            st.session_state["entered_api_key"] = new_api_key.strip()
+            st.session_state.pop("assistant_init_error", None)
+            st.rerun()
 
         if st.button("Rebuild vector store", use_container_width=True):
             rebuild_knowledge_base()
@@ -245,12 +303,18 @@ def main() -> None:
         prompt = st.chat_input("Ask about LG refrigerators, sizes, pricing, or features...")
 
     if get_api_key() is None:
-        st.warning("Add your Gemini API key in the sidebar or set GEMINI_API_KEY in a .env file before asking questions.")
+        st.warning("Gemini API key is missing. Use the Update Gemini key button in the sidebar when needed.")
         return
+
+    if "assistant_init_error" in st.session_state:
+        st.error(st.session_state["assistant_init_error"])
 
     assistant = initialize_session_assistant()
     if assistant is None:
-        st.error("The assistant could not be initialized. Please validate the Gemini API key.")
+        if "assistant_init_error" in st.session_state:
+            st.error(st.session_state["assistant_init_error"])
+        else:
+            st.error("The assistant could not be initialized. Please validate the Gemini API key.")
         return
 
     for message in st.session_state.messages:
@@ -275,7 +339,12 @@ def main() -> None:
             st.markdown(prompt)
 
         with st.spinner("Retrieving relevant LG product information..."):
-            result = assistant.ask(prompt)
+            try:
+                result = assistant.ask(prompt)
+            except Exception as exc:
+                st.error(format_gemini_error_message(exc))
+                st.session_state["assistant_init_error"] = format_gemini_error_message(exc)
+                return
 
         answer = result.get("answer", "I could not find a suitable answer in the available documentation.")
         sources = result.get("sources", [])
