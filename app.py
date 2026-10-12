@@ -160,15 +160,30 @@ def format_gemini_error_message(exc: Exception) -> str:
 
 
 def get_api_key() -> Optional[str]:
-    """Read Gemini API key from env or Streamlit secrets."""
-    value = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if value:
-        return value
+    """Read Gemini API key from env, user state, or Streamlit secrets."""
+    for key_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        value = os.getenv(key_name)
+        if value and value.strip():
+            return value.strip()
+
+    if "entered_api_key" in st.session_state:
+        value = st.session_state["entered_api_key"]
+        if value and value.strip():
+            os.environ["GEMINI_API_KEY"] = value.strip()
+            return value.strip()
 
     try:
-        return st.secrets["GEMINI_API_KEY"]
+        secrets = st.secrets
+        for key_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+            value = secrets.get(key_name)
+            if value and str(value).strip():
+                normalized = str(value).strip()
+                os.environ["GEMINI_API_KEY"] = normalized
+                return normalized
     except Exception:
         return None
+
+    return None
 
 
 def initialize_session_assistant() -> Optional[object]:
@@ -181,6 +196,7 @@ def initialize_session_assistant() -> Optional[object]:
             st.session_state.assistant_key = key
             st.session_state.pop("assistant_init_error", None)
         except Exception as exc:
+            print(exc)
             st.session_state["assistant_init_error"] = format_gemini_error_message(exc)
             return None
     return st.session_state.assistant
