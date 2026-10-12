@@ -14,7 +14,7 @@ try:
 except ImportError:  # LangChain 0.3+/newer package layout
     from langchain_community.chains import RetrievalQA
 
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from assist import build_vector_store, ensure_documents_directory, get_catalog_stats, load_vector_store
